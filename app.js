@@ -1,6 +1,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const templateRouter = require('./routes/templateRoutes');
+const attendanceRouter = require('./routes/attendanceRoutes');
 const {setResponse, sendResponse, httpStatusCode, logMessage} = require('./helpers/appHelper');
 const MailService = require('./services/mail');
 const WhatsappService = require('./services/whatsapp');
@@ -12,7 +13,7 @@ app.use((req, res, next) => {
     setResponse(res);
     const {url, method, hostname} = req;
     console.log(hostname, method, url);
-    logMessage({data: {hostname, method, url}});
+    // logMessage({data: {hostname, method, url}});
     next();
 });
 
@@ -21,6 +22,7 @@ app.get('/', () => {
 });
 
 app.use('/api/template', templateRouter);
+app.use('/api/attendance', attendanceRouter)
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
