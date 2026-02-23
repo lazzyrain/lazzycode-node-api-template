@@ -108,7 +108,7 @@ const ProcessAttendance = async (scheduleList, fingerList) => {
             status = 'HOLIDAY'; // LIBUR
         }
 
-        if (schedule.shift_working_hour == 0) {
+        if (schedule.calendar_type == 'OFFDAY') {
           status = 'OFFDAY'; // GAK ADA JADWAL KERJA
         }
 
@@ -135,4 +135,6 @@ const ProcessAttendance = async (scheduleList, fingerList) => {
 
 // return result;
 
-module.exports = {ProcessAttendance}
+module.exports = [
+    ProcessAttendance
+]
