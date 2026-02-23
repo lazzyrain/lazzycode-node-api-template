@@ -1,11 +1,12 @@
 const {sendResponse, httpStatusCode} = require('../helpers/appHelper');
 const { ProcessAttendance } = require('../helpers/attendanceHelper');
 
-const PERIODE = '2026-01';
+const BASE_URL = '';
+const PERIODE = '2026-02';
 
 const AttendanceController = {
     getListScheduleWorking: async () => {
-        const getResult = await fetch ('http://localhost/hr-management/api/attendance/listScheduleWorking?periode=' + PERIODE);
+        const getResult = await fetch (BASE_URL + '/attendance/listScheduleWorking?periode=' + PERIODE);
         const jsonResult = await getResult.json();
         const result = jsonResult.data ?? [];
 
@@ -13,7 +14,7 @@ const AttendanceController = {
     },
 
     getListRawAttendance: async () => {
-        const getResult = await fetch ('http://localhost/hr-management/api/attendance/listRawAttendance?periode=' + PERIODE);
+        const getResult = await fetch (BASE_URL + '/attendance/listRawAttendance?periode=' + PERIODE);
         const jsonResult = await getResult.json();
         const result = jsonResult.data ?? [];
 
