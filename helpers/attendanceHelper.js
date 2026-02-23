@@ -21,7 +21,7 @@ const formatDateTime = (date) => {
     );
 }
 
-const ProcessAttendance = async (scheduleList, fingerList) => {
+export const ProcessAttendance = async (scheduleList, fingerList) => {
     const fingerByEmp = {};
     for (const finger of fingerList) {
         if (!fingerByEmp[finger.emp_id]) fingerByEmp[finger.emp_id] = [];
@@ -134,7 +134,3 @@ const ProcessAttendance = async (scheduleList, fingerList) => {
 // const result = ProcessAttendance(scheduleList, fingerList);
 
 // return result;
-
-module.exports = [
-    ProcessAttendance
-]
