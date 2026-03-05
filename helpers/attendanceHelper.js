@@ -45,12 +45,40 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
         let shiftOutBase = new Date(`${schedule.attendance_out}`);
 
         const before = 4 * 3600 * 1000;
-        const after = 7 * 3600 * 1000;
+        const after = 8 * 3600 * 1000;
 
         const windowInStart = new Date(shiftInBase.getTime() - before);
         const windowInEnd = shiftOutBase;
         const windowOutStart = shiftInBase;
-        const windowOutEnd = new Date(shiftOutBase.getTime() + after);
+        let windowOutEnd = new Date(shiftOutBase.getTime() + after);
+
+        const hasOvertimeCallback = (schedule.overtime_callback_from &&
+            schedule.overtime_callback_to &&
+            schedule.overtime_callback_total_hour);
+        let overtimeCallbackFrom;
+        let overtimeCallbackTo;
+        if (hasOvertimeCallback) {
+            overtimeCallbackFrom = new Date(
+                `${schedule.schedule_date} ${schedule.overtime_callback_from}`
+            );
+            overtimeCallbackTo = new Date(
+                `${schedule.schedule_date} ${schedule.overtime_callback_to}`
+            );
+
+            // kalau callback lebih kecil dari attendance_in
+            // berarti callback ada di hari setelah attendance_out
+            if (overtimeCallbackFrom <= shiftInBase) {
+                overtimeCallbackFrom.setDate(overtimeCallbackFrom.getDate() + 1);
+            }
+            if (overtimeCallbackTo <= overtimeCallbackFrom) {
+                overtimeCallbackTo.setDate(overtimeCallbackTo.getDate() + 1);
+            }
+
+            // windowOutEnd maksimal sebelum overtime_callback_from
+            if (overtimeCallbackFrom < windowOutEnd) {
+                windowOutEnd = overtimeCallbackFrom;
+            }
+        }
 
         const fingers = fingerByEmp[empId] || [];
 
@@ -91,6 +119,10 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
             status = "ABSENT"; // TIDAK HADIR
         }
 
+        if (schedule.calendar_type == 'HOLIDAY') {
+            status = 'HOLIDAY'; // LIBUR
+        }
+
         if (actualIn && actualOut) {
             status = "PRESENT"; // HADIR
 
@@ -104,16 +136,23 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
             }
         }
 
-        if (schedule.calendar_type == 'HOLIDAY') {
-            status = 'HOLIDAY'; // LIBUR
-        }
-
         if (schedule.calendar_type == 'OFFDAY') {
-          status = 'OFFDAY'; // GAK ADA JADWAL KERJA
+            status = 'OFFDAY'; // GAK ADA JADWAL KERJA
         }
 
         if (['ANNUAL LEAVE', 'UNPAID LEAVE', 'MEDICAL LEAVE', 'SPECIAL LEAVE', 'MATERNITY LEAVE'].includes(schedule.leave_type)) {
-           status = 'LEAVE'; // CUTI FULLDAY
+            status = 'LEAVE'; // CUTI FULLDAY
+        }
+
+        let resultOvertimeCallback = {
+            overtime_callback_actual_in: '',
+            overtime_callback_actual_out: '',
+            overtime_callback_status: '',
+            overtime_callback_late: '',
+            overtime_callback_early: ''
+        };
+        if (hasOvertimeCallback) {
+            resultOvertimeCallback = await ProcessOvertimeCallback(fingers, overtimeCallbackFrom, overtimeCallbackTo);
         }
 
         result.push({
@@ -122,11 +161,81 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
             actual_out: actualOut ? formatDateTime(actualOut) : '',
             status: status,
             late: late,
-            early: early
+            early: early,
+            ...resultOvertimeCallback
         });
     }
 
     return result;
+}
+
+const ProcessOvertimeCallback = async (fingers, overtimeCallbackFrom, overtimeCallbackTo) => {
+    const overtimeCallbackBefore = 1 * 3600 * 1000;
+    const overtimeCallbackBeforeAfter = 8 * 3600 * 1000;
+    const windowOvertimeCallbackInStart = new Date(overtimeCallbackFrom.getTime() - overtimeCallbackBefore);
+    const windowOvertimeCallbackInEnd = overtimeCallbackTo;
+    const windowOvertimeCallbackOutStart = new Date(overtimeCallbackFrom);
+    const windowOvertimeCallbackOutEnd = new Date(overtimeCallbackTo.getTime() + overtimeCallbackBeforeAfter);
+
+    let actualIn = null;
+    let actualOut = null;
+
+    for (const finger of fingers) {
+        const fingerTime = finger.time;
+
+        if (
+            finger.type === "I" &&
+            !actualIn &&
+            fingerTime >= windowOvertimeCallbackInStart &&
+            fingerTime <= windowOvertimeCallbackInEnd
+        ) {
+            actualIn = fingerTime;
+        }
+
+        if (
+            finger.type === "O" &&
+            !actualOut &&
+            fingerTime >= windowOvertimeCallbackOutStart &&
+            fingerTime <= windowOvertimeCallbackOutEnd
+        ) {
+            actualOut = fingerTime;
+        }
+    }
+
+    let status = "";
+    let late = "00:00";
+    let early = "00:00";
+
+    if (!actualIn || !actualOut) {
+        status = "INCOMPLETE"; // TIDAK LENGKAP
+    }
+
+    if ((overtimeCallbackFrom && overtimeCallbackTo) && (!actualIn && !actualOut)) {
+        status = "ABSENT"; // TIDAK HADIR
+    }
+
+    if (actualIn && actualOut) {
+        status = "PRESENT"; // HADIR
+
+        if (actualIn > overtimeCallbackFrom) {
+            status = "LATE ARRIVAL"; // TELAT
+            late = formatDuration(actualIn - overtimeCallbackFrom);
+        }
+
+        if (actualOut < overtimeCallbackTo) {
+            early = formatDuration(overtimeCallbackTo - actualOut);
+        }
+    }
+
+    return {
+        overtime_callback_from: overtimeCallbackFrom ? formatDateTime(overtimeCallbackFrom) : '',
+        overtime_callback_to: overtimeCallbackTo ? formatDateTime(overtimeCallbackTo) : '',
+        overtime_callback_actual_in: actualIn ? formatDateTime(actualIn) : '',
+        overtime_callback_actual_out: actualOut ? formatDateTime(actualOut) : '',
+        overtime_callback_status: status,
+        overtime_callback_late: late,
+        overtime_callback_early: early
+    };
 }
 
 // const scheduleList = $('Get List Schedule Working').first().json.data;
