@@ -123,6 +123,10 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
             status = 'HOLIDAY'; // LIBUR
         }
 
+        if (schedule.calendar_type == 'OFFDAY') {
+            status = 'OFFDAY'; // GAK ADA JADWAL KERJA
+        }
+
         if (actualIn && actualOut) {
             status = "PRESENT"; // HADIR
 
@@ -134,10 +138,6 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
             if (actualOut < shiftOutBase) {
                 early = formatDuration(shiftOutBase - actualOut);
             }
-        }
-
-        if (schedule.calendar_type == 'OFFDAY') {
-            status = 'OFFDAY'; // GAK ADA JADWAL KERJA
         }
 
         if (['ANNUAL LEAVE', 'UNPAID LEAVE', 'MEDICAL LEAVE', 'SPECIAL LEAVE', 'MATERNITY LEAVE'].includes(schedule.leave_type)) {
