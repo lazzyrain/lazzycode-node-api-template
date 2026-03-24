@@ -1,11 +1,13 @@
 const formatDuration = (ms) => {
-    if (ms <= 0) return "00:00";
+    if (ms <= 0) return "00:00:00";
 
-    const totalMinutes = Math.floor(ms / 60000);
-    const hh = String(Math.floor(totalMinutes / 60)).padStart(2, '0');
-    const mm = String(totalMinutes % 60).padStart(2, '0');
+    const totalSeconds = Math.floor(ms / 1000);
 
-    return `${hh}:${mm}`;
+    const hh = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+    const mm = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+    const ss = String(totalSeconds % 60).padStart(2, '0');
+
+    return `${hh}:${mm}:${ss}`;
 }
 
 const formatDateTime = (date) => {
@@ -39,7 +41,6 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
     const result = [];
     for (const schedule of scheduleList) {
         const empId = schedule.employee_id;
-        const baseDate = schedule.schedule_date;
 
         const shiftInBase = new Date(`${schedule.attendance_in}`);
         let shiftOutBase = new Date(`${schedule.attendance_out}`);
@@ -52,31 +53,13 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
         const windowOutStart = shiftInBase;
         let windowOutEnd = new Date(shiftOutBase.getTime() + after);
 
-        const hasOvertimeCallback = (schedule.overtime_callback_from &&
-            schedule.overtime_callback_to &&
-            schedule.overtime_callback_total_hour);
-        let overtimeCallbackFrom;
-        let overtimeCallbackTo;
-        if (hasOvertimeCallback) {
-            overtimeCallbackFrom = new Date(
-                `${schedule.schedule_date} ${schedule.overtime_callback_from}`
-            );
-            overtimeCallbackTo = new Date(
-                `${schedule.schedule_date} ${schedule.overtime_callback_to}`
-            );
+        let overtimeCallbackAttendanceIn = schedule.overtime_callback_attendance_in;
+        if (overtimeCallbackAttendanceIn) {
+            overtimeCallbackAttendanceIn = new Date(`${overtimeCallbackAttendanceIn}`);
 
-            // kalau callback lebih kecil dari attendance_in
-            // berarti callback ada di hari setelah attendance_out
-            if (overtimeCallbackFrom <= shiftInBase) {
-                overtimeCallbackFrom.setDate(overtimeCallbackFrom.getDate() + 1);
-            }
-            if (overtimeCallbackTo <= overtimeCallbackFrom) {
-                overtimeCallbackTo.setDate(overtimeCallbackTo.getDate() + 1);
-            }
-
-            // windowOutEnd maksimal sebelum overtime_callback_from
-            if (overtimeCallbackFrom < windowOutEnd) {
-                windowOutEnd = overtimeCallbackFrom;
+            // windowOutEnd maksimal sebelum overtimeCallbackAttendanceIn
+            if (overtimeCallbackAttendanceIn < windowOutEnd) {
+                windowOutEnd = overtimeCallbackAttendanceIn;
             }
         }
 
@@ -144,98 +127,17 @@ export const ProcessAttendance = async (scheduleList, fingerList) => {
             status = 'LEAVE'; // CUTI FULLDAY
         }
 
-        let resultOvertimeCallback = {
-            overtime_callback_actual_in: '',
-            overtime_callback_actual_out: '',
-            overtime_callback_status: '',
-            overtime_callback_late: '',
-            overtime_callback_early: ''
-        };
-        if (hasOvertimeCallback) {
-            resultOvertimeCallback = await ProcessOvertimeCallback(fingers, overtimeCallbackFrom, overtimeCallbackTo);
-        }
-
         result.push({
             ...schedule,
             actual_in: actualIn ? formatDateTime(actualIn) : '',
             actual_out: actualOut ? formatDateTime(actualOut) : '',
             status: status,
             late: late,
-            early: early,
-            ...resultOvertimeCallback
+            early: early
         });
     }
 
     return result;
-}
-
-const ProcessOvertimeCallback = async (fingers, overtimeCallbackFrom, overtimeCallbackTo) => {
-    const overtimeCallbackBefore = 1 * 3600 * 1000;
-    const overtimeCallbackBeforeAfter = 8 * 3600 * 1000;
-    const windowOvertimeCallbackInStart = new Date(overtimeCallbackFrom.getTime() - overtimeCallbackBefore);
-    const windowOvertimeCallbackInEnd = overtimeCallbackTo;
-    const windowOvertimeCallbackOutStart = new Date(overtimeCallbackFrom);
-    const windowOvertimeCallbackOutEnd = new Date(overtimeCallbackTo.getTime() + overtimeCallbackBeforeAfter);
-
-    let actualIn = null;
-    let actualOut = null;
-
-    for (const finger of fingers) {
-        const fingerTime = finger.time;
-
-        if (
-            finger.type === "I" &&
-            !actualIn &&
-            fingerTime >= windowOvertimeCallbackInStart &&
-            fingerTime <= windowOvertimeCallbackInEnd
-        ) {
-            actualIn = fingerTime;
-        }
-
-        if (
-            finger.type === "O" &&
-            !actualOut &&
-            fingerTime >= windowOvertimeCallbackOutStart &&
-            fingerTime <= windowOvertimeCallbackOutEnd
-        ) {
-            actualOut = fingerTime;
-        }
-    }
-
-    let status = "";
-    let late = "00:00";
-    let early = "00:00";
-
-    if (!actualIn || !actualOut) {
-        status = "INCOMPLETE"; // TIDAK LENGKAP
-    }
-
-    if ((overtimeCallbackFrom && overtimeCallbackTo) && (!actualIn && !actualOut)) {
-        status = "ABSENT"; // TIDAK HADIR
-    }
-
-    if (actualIn && actualOut) {
-        status = "PRESENT"; // HADIR
-
-        if (actualIn > overtimeCallbackFrom) {
-            status = "LATE ARRIVAL"; // TELAT
-            late = formatDuration(actualIn - overtimeCallbackFrom);
-        }
-
-        if (actualOut < overtimeCallbackTo) {
-            early = formatDuration(overtimeCallbackTo - actualOut);
-        }
-    }
-
-    return {
-        overtime_callback_from: overtimeCallbackFrom ? formatDateTime(overtimeCallbackFrom) : '',
-        overtime_callback_to: overtimeCallbackTo ? formatDateTime(overtimeCallbackTo) : '',
-        overtime_callback_actual_in: actualIn ? formatDateTime(actualIn) : '',
-        overtime_callback_actual_out: actualOut ? formatDateTime(actualOut) : '',
-        overtime_callback_status: status,
-        overtime_callback_late: late,
-        overtime_callback_early: early
-    };
 }
 
 // const scheduleList = $('Get List Schedule Working').first().json.data;
